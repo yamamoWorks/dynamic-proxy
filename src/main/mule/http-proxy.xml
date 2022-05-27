@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:proxy="http://www.mulesoft.org/schema/mule/proxy"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd
+        http://www.mulesoft.org/schema/mule/proxy http://www.mulesoft.org/schema/mule/proxy/current/mule-proxy.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+
+    <configuration-properties file="config.properties"/>
+
+    <configuration defaultResponseTimeout="${proxy.responseTimeout}"/>
+
+    <proxy:config name="proxy-config">
+		<proxy:ignore-headers >
+			<proxy:ignore-header value="${backendBaseUrlHeaderName}" />
+		</proxy:ignore-headers>
+	</proxy:config>
+
+    <api-gateway:autodiscovery apiId="${api.id}" ignoreBasePath="true" doc:name="API Autodiscovery" doc:id="ac1b7022-2235-4f31-a69e-7e3f6303cc4f" flowRef="proxy" />
+	<flow name="proxy">
+        <http:listener config-ref="http-listener-config" path="${proxy.path}" responseStreamingMode="AUTO">
+            <http:response statusCode="#[attributes.statusCode]" reasonPhrase="#[attributes.reasonPhrase]">
+                <http:headers>#[if (vars.proxyResponseHeaders?) vars.proxyResponseHeaders else {}]</http:headers>
+            </http:response>
+        </http:listener>
+		<set-variable value='#[attributes.headers[p("backendBaseUrlHeaderName")] default ""]' doc:name="backendBaseUrl" doc:id="bcb46417-e0c4-4774-b4b6-56b1258338e5" variableName="backendBaseUrl"/>
+		<validation:is-not-blank-string doc:name="Is not blank string" doc:id="945cfe9e-db27-4eb7-86a2-0d2d6b590f80" value="#[vars.backendBaseUrl]" message="'${backendBaseUrlHeaderName}' header is required.">
+			<error-mapping sourceType="VALIDATION:BLANK_STRING" targetType="APP:BAD_REQUEST" />
+		</validation:is-not-blank-string>
+		<proxy:request-headers config-ref="proxy-config" target="proxyRequestHeaders"/>
+
+        <http:request config-ref="http-request-config" url="#[vars.backendBaseUrl ++ (if (attributes.maskedRequestPath == '/' and attributes.requestUri[-1] != '/') '' else attributes.maskedRequestPath)]" method="#[attributes.method]">
+            <http:headers><![CDATA[#[vars.proxyRequestHeaders 
+    filterObject (vars.proxyRequestHeaders[(p("overrideHeaderPrefix") ++ $$ as String)] == null)
+    mapObject (($$ as String replace p("overrideHeaderPrefix") with('')): $)]]]></http:headers>
+            <http:uri-params><![CDATA[#[attributes.uriParams]]]></http:uri-params>
+            <http:query-params><![CDATA[#[attributes.queryParams]]]></http:query-params>
+            <http:response-validator>
+                <http:success-status-code-validator values="0..599"/>
+            </http:response-validator>
+        </http:request>
+
+        <proxy:response-headers config-ref="proxy-config" target="proxyResponseHeaders"/>
+
+        <error-handler>
+            <on-error-continue type="HTTP:TIMEOUT" logException="false">
+                <ee:transform>
+                    <ee:message>
+                        <ee:set-attributes><![CDATA[{
+	statusCode: 504
+}
+]]></ee:set-attributes>
+                    </ee:message>
+                </ee:transform>
+            </on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="d8e43563-fcf6-473c-8999-f934a2d64dfa" type="APP:BAD_REQUEST">
+				<ee:transform doc:name="Transform Message" doc:id="cce3805b-c4a2-4882-bf39-28ec0c0701d7" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[output application/json
+---
+{
+	message: error.detailedDescription
+}]]></ee:set-payload>
+						<ee:set-attributes ><![CDATA[{
+	statusCode: 400
+}]]></ee:set-attributes>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+        
+</error-handler>
+    </flow>
+</mule>

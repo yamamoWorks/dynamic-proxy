@@ -1,0 +1,31 @@
+{
+    "configs": [
+        "inbound-config.xml",
+        "outbound-config.xml",
+        "http-proxy.xml"
+    ],
+    "redeploymentEnabled": true,
+    "classLoaderModelLoaderDescriptor": {
+        "attributes": {
+            "exportedPackages": [],
+            "exportedResources": ["config.properties"]
+        },
+        "id": "mule"
+    },
+    "requiredProduct": "MULE_EE",
+    "minMuleVersion": "4.4.0",
+    "bundleDescriptorLoader": {
+        "attributes": {},
+        "id": "mule"
+    },
+    "javaSpecificationVersions": ["17"],
+    "secureProperties": [
+        "inbound.keystore.password",
+        "inbound.keystore.keyPassword",
+        "inbound.truststore.password",
+        "outbound.keystore.password",
+        "outbound.keystore.keyPassword",
+        "outbound.truststore.password",
+        "anypoint.platform.client_secret"
+    ]
+}
