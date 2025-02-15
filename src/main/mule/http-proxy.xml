@@ -35,7 +35,8 @@ http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mu
 		</validation:is-not-blank-string>
 		<proxy:request-headers config-ref="proxy-config" target="proxyRequestHeaders"/>
 
-        <http:request config-ref="http-request-config" url="#[vars.backendBaseUrl ++ (if (attributes.maskedRequestPath == '/' and attributes.requestUri[-1] != '/') '' else attributes.maskedRequestPath)]" method="#[attributes.method]">
+        <set-variable value="#[import * from dw::util::Timer&#10;---&#10;currentMilliseconds()]" doc:name="startMilliseconds" doc:id="24855c59-8a48-4960-a5fb-faab01492cc2" variableName="startMilliseconds"/>
+		<http:request config-ref="http-request-config" url="#[vars.backendBaseUrl ++ (if (attributes.maskedRequestPath == '/' and attributes.requestUri[-1] != '/') '' else attributes.maskedRequestPath)]" method="#[attributes.method]">
             <http:headers><![CDATA[#[vars.proxyRequestHeaders 
     filterObject (vars.proxyRequestHeaders[(p("overrideHeaderPrefix") ++ $$ as String)] == null)
     mapObject (($$ as String replace p("overrideHeaderPrefix") with('')): $)]]]></http:headers>
@@ -46,9 +47,19 @@ http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mu
             </http:response-validator>
         </http:request>
 
-        <proxy:response-headers config-ref="proxy-config" target="proxyResponseHeaders"/>
-
-        <error-handler>
+        <set-variable value="#[import * from dw::util::Timer&#10;---&#10;currentMilliseconds() - vars.startMilliseconds]" doc:name="outboundResponseTime" doc:id="b3f64a7f-c332-4301-8d07-101f9f75420c" variableName="outboundResponseTime" />
+		<proxy:response-headers config-ref="proxy-config" target="proxyResponseHeaders"/>
+		<ee:transform doc:name="Set Outbound Response Time" doc:id="239eac77-44c2-4283-898f-273157115b34" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="proxyResponseHeaders" ><![CDATA[%dw 2.0
+output application/java
+---
+vars.proxyResponseHeaders ++ { "x-outbound-response-time": vars.outboundResponseTime }]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<error-handler>
             <on-error-continue type="HTTP:TIMEOUT" logException="false">
                 <ee:transform>
                     <ee:message>
