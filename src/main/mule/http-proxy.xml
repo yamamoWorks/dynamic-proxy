@@ -18,7 +18,6 @@ http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mu
 
     <proxy:config name="proxy-config">
 		<proxy:ignore-headers >
-			<proxy:ignore-header value="${backendBaseUrlHeaderName}" />
 		</proxy:ignore-headers>
 	</proxy:config>
 
@@ -35,11 +34,21 @@ http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mu
 		</validation:is-not-blank-string>
 		<proxy:request-headers config-ref="proxy-config" target="proxyRequestHeaders"/>
 
-        <set-variable value="#[import * from dw::util::Timer&#10;---&#10;currentMilliseconds()]" doc:name="startMilliseconds" doc:id="24855c59-8a48-4960-a5fb-faab01492cc2" variableName="startMilliseconds"/>
-		<http:request config-ref="http-request-config" url="#[vars.backendBaseUrl ++ (if (attributes.maskedRequestPath == '/' and attributes.requestUri[-1] != '/') '' else attributes.maskedRequestPath)]" method="#[attributes.method]">
-            <http:headers><![CDATA[#[vars.proxyRequestHeaders 
+        <ee:transform doc:name="requestHeaders" doc:id="00d09ed7-abaf-4b18-915e-69e9db98b7f9" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="newProxyRequestHeaders" ><![CDATA[var ignoreHeaders = (p("ignoreHeaders") splitBy ',') map upper(trim($))
+---
+vars.proxyRequestHeaders
+	filterObject (not (ignoreHeaders contains(upper($$))))
     filterObject (vars.proxyRequestHeaders[(p("overrideHeaderPrefix") ++ $$ as String)] == null)
-    mapObject (($$ as String replace p("overrideHeaderPrefix") with('')): $)]]]></http:headers>
+    mapObject (($$ as String replace p("overrideHeaderPrefix") with('')): $)]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<set-variable value="#[import * from dw::util::Timer&#10;---&#10;currentMilliseconds()]" doc:name="startMilliseconds" doc:id="24855c59-8a48-4960-a5fb-faab01492cc2" variableName="startMilliseconds"/>
+		<http:request config-ref="http-request-config" url="#[vars.backendBaseUrl ++ (if (attributes.maskedRequestPath == '/' and attributes.requestUri[-1] != '/') '' else attributes.maskedRequestPath)]" method="#[attributes.method]">
+            <http:headers><![CDATA[#[vars.newProxyRequestHeaders]]]></http:headers>
             <http:uri-params><![CDATA[#[attributes.uriParams]]]></http:uri-params>
             <http:query-params><![CDATA[#[attributes.queryParams]]]></http:query-params>
             <http:response-validator>
